@@ -1,7 +1,7 @@
 import logging
 
 from docketanalyzer_chat import Chat
-from docketanalyzer_core import env
+from docketanalyzer_core import env, notabs
 
 
 def test_anthropic():
@@ -67,3 +67,20 @@ def test_together():
     logging.info(f"Command says: {response}")
     assert isinstance(response, str), "Response is not a string"
     assert len(response) > 0, "Response is empty"
+
+
+def test_chat_thread():
+    """Test Chat with conversation history."""
+    chat = Chat()
+    chat(notabs("""
+        This is a unit test to make sure we're maintaining conversation history.
+        The secret number is 72.
+                           
+        Just respond with the word 'ok' and nothing else.
+    """))
+    response = chat(notabs("""
+        Ok, what was the secret number?
+        Please respond with the number itself and nothing else.
+    """), thread=True)
+
+    assert "72" in response, "Secret number not found in response"

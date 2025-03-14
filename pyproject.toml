@@ -26,7 +26,7 @@ lint.select = ["E", "F", "I", "B", "UP", "N", "SIM", "PD", "NPY", "PTH", "RUF", 
 lint.ignore = ["D100", "D104"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["docketanalyzer_core"]
+known-first-party = ["docketanalyzer_core", "docketanalyzer_chat"]
 section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
 
 [tool.ruff.lint.per-file-ignores]
@@ -38,6 +38,11 @@ convention = "google"
 [tool.pytest.ini_options]
 log_cli = true
 log_cli_level = "INFO"
-addopts = "-ra -q --cov=docketanalyzer_core"
+addopts = "-ra -q --cov=docketanalyzer_chat"
 testpaths = ["tests"]
 pythonpath = "."
+filterwarnings = [
+    "ignore::DeprecationWarning:litellm.*:",
+    "ignore::DeprecationWarning:httpx.*:",
+    "ignore::pydantic.PydanticDeprecatedSince20:pydantic.*:"
+]

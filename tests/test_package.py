@@ -7,7 +7,6 @@ from docketanalyzer_core import notabs
 
 def test_import_time():
     """Test the import time of the package."""
-
     timing_code = notabs("""
         import time
         start = time.time()

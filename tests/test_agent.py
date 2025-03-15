@@ -1,4 +1,7 @@
+import asyncio
+
 from docketanalyzer_chat import Agent, Tool
+from docketanalyzer_core import notabs
 
 
 class WeatherTool(Tool):
@@ -28,13 +31,57 @@ class WeatherAgent(Agent):
         )
 
 
-def test_default_agent():
-    """Test default Agent with tools passed to init."""
-    # agent = Agent(tools=[WeatherTool])
-    pass
+def test_default_agent_run():
+    """Test default Agent with tools passed to init using run."""
+    message = notabs("""
+        What's the weather in New York and San Francisco? 
+        First take a guess, then use your tool.
+    """)
+    agent = Agent(tools=[WeatherTool])
+    agent(message)
+
+    tool_call_messages = 0
+    tool_result_messages = 0
+    user_messages = 0
+    assistant_messages = 0
+    for message in agent.messages:
+        if message["role"] == "user":
+            user_messages += 1
+        elif message["role"] == "assistant":
+            if message.get("tool_calls"):
+                tool_call_messages += 1
+            assistant_messages += 1
+        elif message["role"] == "tool":
+            tool_result_messages += 1
+
+    assert user_messages == 1, "Expected one user message"
+    assert assistant_messages == 2, "Expected two assistant messages"
+    assert tool_call_messages == 1, "Expected one tool call message"
+    assert tool_result_messages == 2, "Expected two tool result messages"
 
 
-def test_custom_agent():
-    """Test customn Agent."""
-    # agent = WeatherAgent()
-    pass
+def test_custom_agent_stream():
+    """Test customn Agent with stream."""
+    message = "What's the weather in New York and San Francisco?"
+
+    agent = WeatherAgent()
+
+    content_delta_count = 0
+    tool_call_counts = 0
+    tool_result_counts = 0
+
+    async def run_stream():
+        nonlocal content_delta_count, tool_call_counts, tool_result_counts
+        async for response in agent.stream(message):
+            if "content_delta" in response:
+                content_delta_count += 1
+            if "tool_call" in response:
+                tool_call_counts += 1
+            if "tool_result" in response:
+                tool_result_counts += 1
+
+    asyncio.run(run_stream())
+
+    assert content_delta_count > 5, "Too few content deltas in response stream"
+    assert tool_call_counts == 2, "Expected two tool calls in response stream"
+    assert tool_result_counts == 2, "Expected two tool results in response stream"

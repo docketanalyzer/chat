@@ -32,6 +32,13 @@ class Agent:
             max_steps_per_lifetime=max_steps_per_lifetime,
         )
 
+    def __call__(self, messages: list[dict[str, str]] | str | None = None, **kwargs):
+        """Main entry point for the agent.
+
+        Intended to be overridden for custom workflows.
+        """
+        self.run(messages, **kwargs)
+
     def setup(
         self,
         messages: list[dict[str, str]] | None = None,

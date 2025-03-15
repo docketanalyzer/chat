@@ -1,7 +1,5 @@
 from typing import Any
 
-from litellm import completion
-
 
 class Chat:
     """Simplified litellm wrapper for chat models.
@@ -10,8 +8,10 @@ class Chat:
 
     Attributes:
         args (dict): Arguments for the completion function.
-        history (list): Conversation history.
+        messages (list): Conversation history.
         r: Response object from the completion function.
+        streaming_message (dict | None): Current message being streamed.
+        finish_reason (str | None): Reason for completion finish.
     """
 
     def __init__(
@@ -31,8 +31,28 @@ class Chat:
             **kwargs: Additional arguments to pass to the completion function.
         """
         self.args = {"model": model, "temperature": temperature, **kwargs}
-        self.history = []
+        self.messages = []
         self.r = None
+        self.streaming_message = None
+        self.finish_reason = None
+
+    def prepare_generation(
+        self,
+        messages: list[dict[str, str]] | str,
+        thread: bool = False,
+        **kwargs: dict[str, Any],
+    ) -> dict:
+        """Prepare arguments for the completion function."""
+        self.finish_reason = None
+        self.streaming_message = None
+        if isinstance(messages, str):
+            messages = [{"role": "user", "content": messages}]
+        if not thread:
+            self.messages = []
+        self.messages.extend(messages)
+        kwargs = {**self.args, **kwargs}
+        kwargs["messages"] = self.messages
+        return kwargs
 
     def __call__(
         self,
@@ -54,10 +74,76 @@ class Chat:
         Returns:
             str: The content of the model's response message.
         """
-        if isinstance(messages, str):
-            messages = [{"role": "user", "content": messages}]
-        if not thread:
-            self.history = []
-        self.history.extend(messages)
-        self.r = completion(messages=self.history, **self.args, **kwargs)
-        return self.r.choices[0].message.content
+        from litellm import completion
+
+        args = self.prepare_generation(messages, thread=thread, **kwargs)
+        self.r = completion(**args)
+        message = dict(self.r.choices[0].message)
+        if message.get("tool_calls"):
+            message["tool_calls"] = [
+                dict(tool_call, function=dict(tool_call.function))
+                for tool_call in message["tool_calls"]
+            ]
+        self.messages.append(message)
+        self.finish_reason = self.r.choices[0].finish_reason
+        return message["content"]
+
+    async def stream(
+        self,
+        messages: list[dict[str, str]] | str,
+        thread: bool = False,
+        **kwargs: dict[str, Any],
+    ):
+        """Generate a chat completion with async streaming.
+
+        Args:
+            messages (list[dict[str, str]] | str): Either a string message or a list of
+                message dictionaries with 'role' and 'content' keys.
+                If a string is provided, it's converted to a user message.
+            thread (bool): If True, maintains conversation history between calls.
+                If False, conversation history is reset. Default is False.
+            **kwargs: Additional arguments to pass to the completion function,
+                which will override any arguments set during initialization.
+
+        Returns:
+            ModelResponseStream: An async generator yielding response chunks.
+                Each chunk a delta for the model's response.
+        """
+        from litellm import acompletion
+
+        args = self.prepare_generation(messages, thread=thread, **kwargs)
+        self.r = await acompletion(stream=True, **args)
+        self.streaming_message = {"role": "assistant", "content": ""}
+        tool_calls = {}
+        async for chunk in self.r:
+            delta = chunk.choices[0].delta
+            # Update message content
+            if delta.content:
+                self.streaming_message["content"] += delta.content
+
+            # Update tool calls
+            if delta.tool_calls:
+                for tool_call in delta.tool_calls:
+                    if tool_call.index not in tool_calls:
+                        tool_calls[tool_call.index] = {
+                            "id": tool_call.id,
+                            "type": tool_call.type,
+                            "function": {
+                                "name": tool_call.function.name,
+                                "arguments": tool_call.function.arguments,
+                            },
+                        }
+                    else:
+                        if tool_call.function.arguments:
+                            tool_calls[tool_call.index]["function"]["arguments"] += (
+                                tool_call.function.arguments
+                            )
+                self.streaming_message["tool_calls"] = list(tool_calls.copy().values())
+
+            # Set finish reason
+            if chunk.choices[0].finish_reason:
+                self.messages.append(self.streaming_message)
+                self.streaming_message = None
+                self.finish_reason = chunk.choices[0].finish_reason
+
+            yield chunk

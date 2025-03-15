@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from docketanalyzer_chat import Chat
@@ -72,15 +73,37 @@ def test_together():
 def test_chat_thread():
     """Test Chat with conversation history."""
     chat = Chat()
-    chat(notabs("""
+    chat(
+        notabs("""
         This is a unit test to make sure we're maintaining conversation history.
         The secret number is 72.
                            
         Just respond with the word 'ok' and nothing else.
-    """))
-    response = chat(notabs("""
+    """)
+    )
+    response = chat(
+        notabs("""
         Ok, what was the secret number?
         Please respond with the number itself and nothing else.
-    """), thread=True)
+    """),
+        thread=True,
+    )
 
     assert "72" in response, "Secret number not found in response"
+
+
+def test_chat_stream():
+    """Test Chat with conversation history."""
+    chat = Chat()
+    count = 0
+
+    async def run_stream():
+        nonlocal count
+        async for _ in chat.stream("Write a beautiful sentence."):
+            count += 1
+
+    asyncio.run(run_stream())
+
+    logging.info(chat.messages[-1]["content"])
+    assert count > 5, "Too short a response"
+    assert len(chat.messages) == 2, "Message not added to history"

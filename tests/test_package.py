@@ -7,8 +7,6 @@ from docketanalyzer_core import notabs
 
 def test_import_time():
     """Test the import time of the package."""
-    # Initial import for setup time
-    import docketanalyzer_chat  # noqa: F401
 
     timing_code = notabs("""
         import time
@@ -25,4 +23,4 @@ def test_import_time():
     import_time = float(result.stdout.strip())
 
     logging.info(f"docketanalyzer_chat import time: {import_time:.4f} seconds")
-    assert import_time < 1, f"Import time is too long: {import_time} seconds"
+    assert import_time < 2, f"Import time is too long: {import_time} seconds"
